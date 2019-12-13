@@ -27,12 +27,6 @@ Mixing Styles:
 
 
 
-## Web Demo
-A web demo for generating your own landscapes live:
-
-https://matchue.ca/p/earthhd/
-
-
 ## Before Running
 Please ensure you have created the following folders:
 1. /Models/
