@@ -34,3 +34,7 @@ Please ensure you have created the following folders:
 3. /data/
 
 Additionally, please ensure that your folder with images is in /data/ and changed at the top of stylegan.py.
+
+For **pretrained models**, download the pretrained models from [here](https://drive.google.com/drive/folders/1jE0lIJxgaHS7EE6mzm_ftl0ZcaY6olqI?usp=sharing)
+
+Then, adjust the main code at the bottom to use model.load(*model_num*), where *model_num* = the number from the downloaded model.
