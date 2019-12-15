@@ -78,12 +78,12 @@ def g_block(inp, istyle, inoise, fil, u = True):
     else:
         out = Activation('linear')(inp)
 
-    rgb_style = Dense(fil, kernel_initializer = 'glorot_uniform')(istyle)
-    style = Dense(inp.shape[-1], kernel_initializer = 'glorot_uniform')(istyle)
+    rgb_style = Dense(fil, kernel_initializer = 'he_uniform')(istyle)
+    style = Dense(inp.shape[-1], kernel_initializer = 'he_uniform')(istyle)
     delta = Lambda(crop_to_fit)([inoise, out])
     d = Dense(fil, kernel_initializer = 'zeros')(delta)
 
-    out = Conv2DMod(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'glorot_uniform')([out, style])
+    out = Conv2DMod(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_uniform')([out, style])
     out = LeakyReLU(0.2)(out)
     out = add([out, d])
 
@@ -91,9 +91,9 @@ def g_block(inp, istyle, inoise, fil, u = True):
 
 def d_block(inp, fil, p = True):
 
-    res = Conv2D(fil, 1, kernel_initializer = 'glorot_uniform')(inp)
+    res = Conv2D(fil, 1, kernel_initializer = 'he_uniform')(inp)
     
-    out = Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'glorot_uniform')(inp)
+    out = Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_uniform')(inp)
     out = LeakyReLU(0.2)(out)
 
     out = add([res, out])
@@ -111,7 +111,7 @@ def to_rgb(inp, style):
 def from_rgb(inp, conc = None):
     fil = int(im_size * 4 / inp.shape[2])
     z = AveragePooling2D()(inp)
-    x = Conv2D(fil, 1, kernel_initializer = 'glorot_uniform')(z)
+    x = Conv2D(fil, 1, kernel_initializer = 'he_uniform')(z)
     if conc is not None:
         x = concatenate([x, conc])
     return x, z
@@ -177,7 +177,7 @@ class GAN(object):
 
         x = Flatten()(x)
 
-        x = Dense(1, kernel_initializer = 'glorot_uniform')(x)
+        x = Dense(1, kernel_initializer = 'he_uniform')(x)
 
         self.D = Model(inputs = inp, outputs = x)
 
@@ -218,7 +218,7 @@ class GAN(object):
         outs = []
 
         #Actual Model
-        x = Dense(4*4*4*cha, activation = 'relu', kernel_initializer = 'glorot_uniform')(x)
+        x = Dense(4*4*4*cha, activation = 'relu', kernel_initializer = 'random_normal')(x)
         x = Reshape([4, 4, 4*cha])(x)
 
         x, r = g_block(x, inp_style[0], inp_noise, 32 * cha, u = False)  #4
@@ -230,7 +230,7 @@ class GAN(object):
         x, r = g_block(x, inp_style[2], inp_noise, 8 * cha)  #16
         outs.append(r)
 
-        #x = g_block(x, inp_style[3], inp_noise, 6 * cha)  #32
+        #x, r = g_block(x, inp_style[3], inp_noise, 6 * cha)  #32
         #outs.append(r)
 
         x, r = g_block(x, inp_style[3], inp_noise, 4 * cha)   #64
@@ -340,6 +340,7 @@ class StyleGAN(object):
         self.nones = -self.ones
 
         self.pl_mean = 0
+        self.av = np.zeros([44])
 
     def train(self):
 
@@ -350,7 +351,7 @@ class StyleGAN(object):
             style = noiseList(BATCH_SIZE)
 
         #Apply penalties every 16 steps
-        apply_gradient_penalty = self.GAN.steps % 16 == 0 or self.GAN.steps < 3000
+        apply_gradient_penalty = self.GAN.steps % 2 == 0 or self.GAN.steps < 3000
         apply_path_penalty = self.GAN.steps % 16 == 0 and self.GAN.steps > 3000
 
         a, b, c, d = self.train_step(self.im.get_batch(BATCH_SIZE).astype('float32'), style, nImage(BATCH_SIZE), apply_gradient_penalty, apply_path_penalty)
@@ -448,7 +449,9 @@ class StyleGAN(object):
                 #Get distance after adjustment (path length)
                 delta_g = K.mean(K.square(pl_images - generated_images), axis = [1, 2, 3])
                 pl_lengths = delta_g
-                gen_loss += K.mean(K.square(pl_lengths - self.pl_mean)) * 0.01
+
+                if self.pl_mean > 0:
+                    gen_loss += K.mean(K.square(pl_lengths - self.pl_mean))
 
         #Get gradients for respective areas
         gradients_of_generator = gen_tape.gradient(gen_loss, self.GAN.GM.trainable_variables)
@@ -466,7 +469,7 @@ class StyleGAN(object):
         n2 = nImage(64)
         trunc = np.ones([64, 1]) * trunc
 
-
+        
         generated_images = self.GAN.GM.predict(n1 + [n2], batch_size = BATCH_SIZE)
 
         r = []
@@ -479,10 +482,11 @@ class StyleGAN(object):
         x = Image.fromarray(np.uint8(c1*255))
 
         x.save("Results/i"+str(num)+".png")
-
+        
         # Moving Average
 
         generated_images = self.GAN.GMA.predict(n1 + [n2, trunc], batch_size = BATCH_SIZE)
+        #generated_images = self.generateTruncated(n1, trunc = trunc)
 
         r = []
 
@@ -508,6 +512,7 @@ class StyleGAN(object):
         latent = p1 + [] + p2
 
         generated_images = self.GAN.GMA.predict(latent + [nImage(64), trunc], batch_size = BATCH_SIZE)
+        #generated_images = self.generateTruncated(latent, trunc = trunc)
 
         r = []
 
@@ -520,6 +525,41 @@ class StyleGAN(object):
         x = Image.fromarray(np.uint8(c1*255))
 
         x.save("Results/i"+str(num)+"-mr.png")
+
+    def generateTruncated(self, style, noi = np.zeros([44]), trunc = 0.5, outImage = False, num = 0):
+
+        #Get W's center of mass
+        if self.av.shape[0] == 44: #44 is an arbitrary value
+            print("Approximating W center of mass")
+            self.av = np.mean(self.GAN.S.predict(noise(2000), batch_size = 64), axis = 0)
+            self.av = np.expand_dims(self.av, axis = 0)
+
+        if noi.shape[0] == 44:
+            noi = nImage(64)
+            
+        w_space = []
+        pl_lengths = self.pl_mean
+        for i in range(len(style)):
+            tempStyle = self.GAN.S.predict(style[i])
+            tempStyle = trunc * (tempStyle - self.av) + self.av
+            w_space.append(tempStyle)
+
+        generated_images = self.GAN.GE.predict(w_space + [noi], batch_size = BATCH_SIZE)
+        
+        if outImage:
+            r = []
+
+            for i in range(0, 64, 8):
+                r.append(np.concatenate(generated_images[i:i+8], axis = 0))
+
+            c1 = np.concatenate(r, axis = 1)
+            c1 = np.clip(c1, 0.0, 1.0)
+
+            x = Image.fromarray(np.uint8(c1*255))
+
+            x.save("Results/t"+str(num)+".png")
+            
+        return generated_images
 
     def saveModel(self, model, name, num):
         json = model.to_json()
@@ -575,3 +615,14 @@ if __name__ == "__main__":
 
     while model.GAN.steps < 1000001:
         model.train()
+
+    """
+    model.load(20)
+    
+    n1 = noiseList(64)
+    n2 = nImage(64)
+
+    for i in range(200):
+        print(i, end = '\r')
+        model.generateTruncated(n1, noi = n2, trunc = i / 100, outImage = True, num = i)
+    """
