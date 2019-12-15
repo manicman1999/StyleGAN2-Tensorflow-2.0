@@ -19,7 +19,7 @@ from conv_mod import *
 im_size = 128
 latent_size = 512
 BATCH_SIZE = 16
-directory = "Earth"
+directory = "AnimeFaces"
 
 cha = 16
 
@@ -69,16 +69,25 @@ def crop_to_fit(x):
 
     return x[0][:, :height, :width, :]
 
+def upsample(x):
+    return K.resize_images(x,2,2,"channels_last",interpolation='bilinear')
+
+def upsample_to_size(x):
+    y = im_size / x.shape[2]
+    x = K.resize_images(x, y, y, "channels_last",interpolation='bilinear')
+    return x
+
 
 #Blocks
 def g_block(inp, istyle, inoise, fil, u = True):
 
     if u:
-        out = UpSampling2D()(inp)
+        #Custom upsampling because of clone_model issue
+        out = Lambda(upsample, output_shape=[None, inp.shape[2] * 2, inp.shape[2] * 2, None])(inp)
     else:
         out = Activation('linear')(inp)
 
-    rgb_style = Dense(fil, kernel_initializer = 'he_uniform')(istyle)
+    rgb_style = Dense(fil, kernel_initializer = VarianceScaling(200/out.shape[2]))(istyle)
     style = Dense(inp.shape[-1], kernel_initializer = 'he_uniform')(istyle)
     delta = Lambda(crop_to_fit)([inoise, out])
     d = Dense(fil, kernel_initializer = 'zeros')(delta)
@@ -106,7 +115,7 @@ def d_block(inp, fil, p = True):
 def to_rgb(inp, style):
     size = inp.shape[2]
     x = Conv2DMod(3, 1, kernel_initializer = VarianceScaling(200/size), demod = False)([inp, style])
-    return UpSampling2D(int(im_size // size))(x)
+    return Lambda(upsample_to_size, output_shape=[None, im_size, im_size, None])(x)
 
 def from_rgb(inp, conc = None):
     fil = int(im_size * 4 / inp.shape[2])
@@ -147,10 +156,10 @@ class GAN(object):
         self.GMO = Adam(lr = self.LR, beta_1 = 0, beta_2 = 0.999)
         self.DMO = Adam(lr = self.LR * 2, beta_1 = 0, beta_2 = 0.999)
 
-        self.GE = model_from_json(self.G.to_json(), custom_objects = {'Conv2DMod': Conv2DMod})
+        self.GE = clone_model(self.G)
         self.GE.set_weights(self.G.get_weights())
 
-        self.SE = model_from_json(self.S.to_json(), custom_objects = {'Conv2DMod': Conv2DMod})
+        self.SE = clone_model(self.S)
         self.SE.set_weights(self.S.get_weights())
 
     def discriminator(self):
@@ -242,7 +251,9 @@ class GAN(object):
         x, r = g_block(x, inp_style[5], inp_noise, 1 * cha)   #256
         outs.append(r)
 
-        x = average(outs)
+        x = add(outs)
+
+        x = Lambda(lambda y: y/2 + 0.5)(x) #Use values centered around 0, but normalize to [0, 1], providing better initialization
 
         self.G = Model(inputs = inp_style + [inp_noise], outputs = x)
 
