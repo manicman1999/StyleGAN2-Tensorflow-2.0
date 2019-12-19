@@ -18,12 +18,12 @@ Lazy Regularization, Path Length Regularization, and can include larger networks
 ## Image Samples
 Trained on Landscapes for 3.2 million images (200k steps, batch size 16):
 
-![Teaser image](./landscapes.png)
+![Teaser image](./landscapes256.png)
 
 
 Mixing Styles:
 
-![Teaser image](./styles.png)
+![Teaser image](./styles256.png)
 
 
 
