@@ -16,12 +16,12 @@ import tensorflow.keras.backend as K
 from datagen import dataGenerator, printProgressBar
 from conv_mod import *
 
-im_size = 128
+im_size = 256
 latent_size = 512
 BATCH_SIZE = 16
-directory = "AnimeFaces"
+directory = "Earth"
 
-cha = 16
+cha = 24
 
 n_layers = int(log2(im_size) - 1)
 
@@ -93,16 +93,25 @@ def g_block(inp, istyle, inoise, fil, u = True):
     d = Dense(fil, kernel_initializer = 'zeros')(delta)
 
     out = Conv2DMod(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_uniform')([out, style])
-    out = LeakyReLU(0.2)(out)
     out = add([out, d])
+    out = LeakyReLU(0.2)(out)
+
+    style = Dense(fil, kernel_initializer = 'he_uniform')(istyle)
+    d = Dense(fil, kernel_initializer = 'zeros')(delta)
+
+    out = Conv2DMod(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_uniform')([out, style])
+    out = add([out, d])
+    out = LeakyReLU(0.2)(out)
 
     return out, to_rgb(out, rgb_style)
 
 def d_block(inp, fil, p = True):
 
     res = Conv2D(fil, 1, kernel_initializer = 'he_uniform')(inp)
-    
+
     out = Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_uniform')(inp)
+    out = LeakyReLU(0.2)(out)
+    out = Conv2D(filters = fil, kernel_size = 3, padding = 'same', kernel_initializer = 'he_uniform')(out)
     out = LeakyReLU(0.2)(out)
 
     out = add([res, out])
@@ -154,7 +163,7 @@ class GAN(object):
         self.generator()
 
         self.GMO = Adam(lr = self.LR, beta_1 = 0, beta_2 = 0.999)
-        self.DMO = Adam(lr = self.LR * 2, beta_1 = 0, beta_2 = 0.999)
+        self.DMO = Adam(lr = self.LR, beta_1 = 0, beta_2 = 0.999)
 
         self.GE = clone_model(self.G)
         self.GE.set_weights(self.G.get_weights())
@@ -171,17 +180,17 @@ class GAN(object):
 
 
         x = d_block(inp, 1 * cha)   #128
-        
+
         x = d_block(x, 2 * cha)   #64
-        
+
         x = d_block(x, 4 * cha)   #32
-        
-        #x = d_block(x, 6 * cha)  #16
-        
+
+        x = d_block(x, 6 * cha)  #16
+
         x = d_block(x, 8 * cha)  #8
-        
+
         x = d_block(x, 16 * cha)  #4
-        
+
         x = d_block(x, 32 * cha, p = False)  #4
 
         x = Flatten()(x)
@@ -239,16 +248,16 @@ class GAN(object):
         x, r = g_block(x, inp_style[2], inp_noise, 8 * cha)  #16
         outs.append(r)
 
-        #x, r = g_block(x, inp_style[3], inp_noise, 6 * cha)  #32
-        #outs.append(r)
-
-        x, r = g_block(x, inp_style[3], inp_noise, 4 * cha)   #64
+        x, r = g_block(x, inp_style[3], inp_noise, 6 * cha)  #32
         outs.append(r)
 
-        x, r = g_block(x, inp_style[4], inp_noise, 2 * cha)   #128
+        x, r = g_block(x, inp_style[4], inp_noise, 4 * cha)   #64
         outs.append(r)
 
-        x, r = g_block(x, inp_style[5], inp_noise, 1 * cha)   #256
+        x, r = g_block(x, inp_style[5], inp_noise, 2 * cha)   #128
+        outs.append(r)
+
+        x, r = g_block(x, inp_style[6], inp_noise, 1 * cha)   #256
         outs.append(r)
 
         x = add(outs)
@@ -362,8 +371,8 @@ class StyleGAN(object):
             style = noiseList(BATCH_SIZE)
 
         #Apply penalties every 16 steps
-        apply_gradient_penalty = self.GAN.steps % 2 == 0 or self.GAN.steps < 3000
-        apply_path_penalty = self.GAN.steps % 16 == 0 and self.GAN.steps > 3000
+        apply_gradient_penalty = self.GAN.steps % 2 == 0 or self.GAN.steps < 10000
+        apply_path_penalty = self.GAN.steps % 16 == 0
 
         a, b, c, d = self.train_step(self.im.get_batch(BATCH_SIZE).astype('float32'), style, nImage(BATCH_SIZE), apply_gradient_penalty, apply_path_penalty)
 
@@ -442,7 +451,7 @@ class StyleGAN(object):
             gen_loss = K.mean(fake_output)
             divergence = K.mean(K.relu(1 + real_output) + K.relu(1 - fake_output))
             disc_loss = divergence
-            
+
             if perform_gp:
                 #R1 gradient penalty
                 disc_loss += gradient_penalty(images, real_output, 10)
@@ -480,7 +489,7 @@ class StyleGAN(object):
         n2 = nImage(64)
         trunc = np.ones([64, 1]) * trunc
 
-        
+
         generated_images = self.GAN.GM.predict(n1 + [n2], batch_size = BATCH_SIZE)
 
         r = []
@@ -493,7 +502,7 @@ class StyleGAN(object):
         x = Image.fromarray(np.uint8(c1*255))
 
         x.save("Results/i"+str(num)+".png")
-        
+
         # Moving Average
 
         generated_images = self.GAN.GMA.predict(n1 + [n2, trunc], batch_size = BATCH_SIZE)
@@ -547,7 +556,7 @@ class StyleGAN(object):
 
         if noi.shape[0] == 44:
             noi = nImage(64)
-            
+
         w_space = []
         pl_lengths = self.pl_mean
         for i in range(len(style)):
@@ -556,7 +565,7 @@ class StyleGAN(object):
             w_space.append(tempStyle)
 
         generated_images = self.GAN.GE.predict(w_space + [noi], batch_size = BATCH_SIZE)
-        
+
         if outImage:
             r = []
 
@@ -569,7 +578,7 @@ class StyleGAN(object):
             x = Image.fromarray(np.uint8(c1*255))
 
             x.save("Results/t"+str(num)+".png")
-            
+
         return generated_images
 
     def saveModel(self, model, name, num):
@@ -621,19 +630,18 @@ class StyleGAN(object):
 
 
 if __name__ == "__main__":
-    model = StyleGAN(lr = 0.0002, silent = False)
+    model = StyleGAN(lr = 0.0001, silent = False)
     model.evaluate(0)
 
     while model.GAN.steps < 1000001:
         model.train()
 
     """
-    model.load(20)
-    
+    model.load(31)
+
     n1 = noiseList(64)
     n2 = nImage(64)
-
-    for i in range(200):
+    for i in range(50):
         print(i, end = '\r')
-        model.generateTruncated(n1, noi = n2, trunc = i / 100, outImage = True, num = i)
+        model.generateTruncated(n1, noi = n2, trunc = i / 50, outImage = True, num = i)
     """
