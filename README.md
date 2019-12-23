@@ -16,16 +16,16 @@ Lazy Regularization, Path Length Regularization, and can include larger networks
 
 
 ## Image Samples
-Trained on Landscapes for 3.2 million images (200k steps, batch size 16):
-*To clarify, 3.2 million images were shown to the Discriminator, but the dataset consists of only ~14k images.
-Thus, of those 3.2 million images, most are repeats of already seen images.*
+Trained on Landscapes for 3.48 million images (290k steps, batch size 12, channel coefficient 24):
+*To clarify, 3.48 million images were shown to the Discriminator, but the dataset consists of only ~14k images.
+Thus, of those 3.48 million images, most are repeats of already seen images.*
 
-![Teaser image](./landscapes256.png)
+![Teaser image](./landscapes3.png)
 
 
 Mixing Styles:
 
-![Teaser image](./styles256.png)
+![Teaser image](./styles3.png)
 
 
 
