@@ -1,6 +1,6 @@
 # StyleGAN2 Tensorflow 2.0
 
-Unofficial implementation of StyleGAN 2 using TensorFlow 2.0.
+Unofficial implementation of StyleGAN 2 using TensorFlow 2.0. (Compatible with up to 2.5)
 
 Original paper: Analyzing and Improving the Image Quality of StyleGAN
 
