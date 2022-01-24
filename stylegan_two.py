@@ -353,7 +353,7 @@ class StyleGAN(object):
         self.im = dataGenerator(directory, im_size, flip = True)
 
         #Set up variables
-        self.lastblip = time.clock()
+        self.lastblip = time.process_time()
 
         self.silent = silent
 
@@ -404,8 +404,8 @@ class StyleGAN(object):
             print("G:", np.array(b))
             print("PL:", self.pl_mean)
 
-            s = round((time.clock() - self.lastblip), 4)
-            self.lastblip = time.clock()
+            s = round((time.process_time() - self.lastblip), 4)
+            self.lastblip = time.process_time()
 
             steps_per_second = 100 / s
             steps_per_minute = steps_per_second * 60
